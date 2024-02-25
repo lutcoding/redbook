@@ -12,6 +12,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/lutcoding/redbook/internal/repository/dao"
+	smsratelimit "github.com/lutcoding/redbook/internal/service/sms/ratelimit"
 	"github.com/lutcoding/redbook/internal/web/middleware"
 	"github.com/lutcoding/redbook/internal/web/user"
 	"github.com/lutcoding/redbook/pkg/ginx/middlewares/ratelimit"
@@ -68,8 +69,9 @@ func (s *Server) initHandlers() (err error) {
 	codeRepo := repository.NewCodeCacheRepository(codeCache)
 
 	userSvc := service.NewUserService(userRepo)
-	smsSvc := memory.NewService()
-	codeSvc := service.NewCodeService(codeRepo, smsSvc, "1")
+	smsRateLimitSvc := smsratelimit.NewService(memory.NewService(),
+		ratelimit.NewRedisSlidingWindowLimiter(s.redis, time.Minute, 10))
+	codeSvc := service.NewCodeService(codeRepo, smsRateLimitSvc, "1")
 
 	s.userHandler, err = user.New(userSvc, codeSvc)
 	if err != nil {
@@ -101,7 +103,7 @@ func (s *Server) newRouter() *gin.Engine {
 		MaxAge: 12 * time.Hour,
 	}))
 
-	engine.Use(ratelimit.NewBuilder(ratelimit.NewRedisSlidingWindowLimiter(s.redis, time.Minute, 10)).Build())
+	engine.Use(ratelimit.NewBuilder(ratelimit.NewRedisSlidingWindowLimiter(s.redis, time.Minute, 100)).Build())
 	// 注册handler
 	root := engine.Group("/")
 	unauthorized := root.Group("/")

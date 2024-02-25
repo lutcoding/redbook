@@ -1,13 +1,12 @@
 package ratelimit
 
 import (
+	"github.com/lutcoding/redbook/pkg/ratelimit"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/lutcoding/redbook/pkg/ginx/internal/ratelimit"
 )
 
 type Builder struct {

@@ -1,9 +1,9 @@
 package ratelimit
 
 import (
+	ratelimit "github.com/lutcoding/redbook/pkg/ratelimit"
 	"time"
 
-	"github.com/lutcoding/redbook/pkg/ginx/internal/ratelimit"
 	"github.com/redis/go-redis/v9"
 )
 
