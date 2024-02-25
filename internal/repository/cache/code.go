@@ -38,7 +38,6 @@ func NewCodeRedisCache(client redis.Cmdable) *CodeRedisCache {
 
 func (c *CodeRedisCache) Set(ctx context.Context, biz, phone, code string) error {
 	res, err := c.client.Eval(ctx, luaSetCode, []string{c.key(biz, phone)}, code).Int()
-	fmt.Println(c.key(biz, phone))
 	if err != nil {
 		return err
 	}
