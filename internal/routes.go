@@ -4,7 +4,9 @@ import (
 	"github.com/lutcoding/redbook/internal/repository"
 	"github.com/lutcoding/redbook/internal/repository/cache"
 	"github.com/lutcoding/redbook/internal/service"
+	"github.com/lutcoding/redbook/internal/service/oauth/wechat"
 	"github.com/lutcoding/redbook/internal/service/sms/memory"
+	"github.com/lutcoding/redbook/internal/web/oauth"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +29,8 @@ type Server struct {
 	db    *gorm.DB
 	redis redis.Cmdable
 
-	userHandler *user.Handler
+	userHandler         *user.Handler
+	oauth2WeChatHandler *oauth.OAuth2WeChatHandler
 }
 
 func NewServer() (*Server, error) {
@@ -72,12 +75,11 @@ func (s *Server) initHandlers() (err error) {
 	smsRateLimitSvc := smsratelimit.NewService(memory.NewService(),
 		ratelimit.NewRedisSlidingWindowLimiter(s.redis, time.Minute, 10))
 	codeSvc := service.NewCodeService(codeRepo, smsRateLimitSvc, "1")
+	wechatService := wechat.NewService("123", "123")
 
-	s.userHandler, err = user.New(userSvc, codeSvc)
-	if err != nil {
-		return err
-	}
-	return
+	s.userHandler = user.New(userSvc, codeSvc)
+	s.oauth2WeChatHandler = oauth.NewOAuth2WeChatHandler(wechatService, userSvc)
+	return nil
 }
 
 // TODO: RESTful api
@@ -112,7 +114,16 @@ func (s *Server) newRouter() *gin.Engine {
 		unauthorized.POST("/users/login", s.userHandler.Login)
 		unauthorized.POST("/users/login_sms/code/send", s.userHandler.SendLoginSmsCode)
 		unauthorized.POST("/users/login_sms", s.userHandler.LoginSmsCode)
+		oauth2 := unauthorized.Group("/oauth2")
+		{
+			wg := oauth2.Group("/wechat")
+			{
+				wg.GET("/authurl", s.oauth2WeChatHandler.AuthURL)
+				wg.Any("/callback", s.oauth2WeChatHandler.CallBack)
+			}
+		}
 	}
+
 	authorized := root.Group("/", middleware.NewLoginMiddlewareBuilder().Build())
 	{
 		ug := authorized.Group("/users")

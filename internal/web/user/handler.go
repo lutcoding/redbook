@@ -17,11 +17,10 @@ type Handler struct {
 	emailRegexExp *regexp.Regexp
 }
 
-func New(userSvc *service.UserService, smsSvc *service.CodeService) (*Handler, error) {
-	h := &Handler{
+func New(userSvc *service.UserService, smsSvc *service.CodeService) *Handler {
+	return &Handler{
 		emailRegexExp: regexp.MustCompile(emailRegexPattern, regexp.None),
 		svc:           userSvc,
 		smsSvc:        smsSvc,
 	}
-	return h, nil
 }

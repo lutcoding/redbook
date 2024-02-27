@@ -76,3 +76,24 @@ func (svc *UserService) FindOrCreate(ctx context.Context, phone string) (domain.
 	}
 	return svc.repo.FindByPhone(ctx, phone)
 }
+
+func (svc *UserService) FindOrCreateByWeChat(ctx context.Context, wechat domain.Wechat) (domain.User, error) {
+	// 快路径 find比insert快
+	user, err := svc.repo.FindByWeChat(ctx, wechat.OpenID)
+	if !errors.Is(err, repository.ErrUserNotFound) {
+		// 绝大部分请求会进入
+		// err == nil or err != ErrUserNotFound
+		return user, err
+	}
+	// 慢路径
+	// 在系统资源不租, 触发降级后, 不执行慢路径
+	//if ctx.Value("降级") == "true" {
+	//	return domain.User{}, errors.New("system degraded")
+	//}
+	err = svc.repo.Create(ctx, domain.User{WechatInfo: wechat})
+	// 因为这里可能出现并发问题 所以要判断一下 err != repository.ErrUserDuplicate
+	if err != nil && err != repository.ErrUserDuplicate {
+		return domain.User{}, err
+	}
+	return svc.repo.FindByWeChat(ctx, wechat.OpenID)
+}

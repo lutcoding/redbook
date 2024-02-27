@@ -21,6 +21,7 @@ type UserDAO interface {
 	FindByEmail(ctx context.Context, email string) (u User, err error)
 	FindById(ctx context.Context, id int64) (u User, err error)
 	FindByPhone(ctx context.Context, phone string) (u User, err error)
+	FindByWeChat(ctx context.Context, openID string) (u User, err error)
 }
 
 type UserGormDAO struct {
@@ -66,12 +67,20 @@ func (dao *UserGormDAO) FindByPhone(ctx context.Context, phone string) (u User, 
 	return
 }
 
+func (dao *UserGormDAO) FindByWeChat(ctx context.Context, openID string) (u User, err error) {
+	err = dao.db.WithContext(ctx).First(&u, "wechat_open_id = ?", openID).Error
+	return
+}
+
 // User model
 type User struct {
 	Id       int64          `gorm:"primaryKey, autoIncrement"`
 	Email    sql.NullString `gorm:"unique"`
 	Phone    sql.NullString `gorm:"unique"`
 	Password string
+
+	WechatOpenID  sql.NullString `gorm:"unique"`
+	WechatUnionID sql.NullString
 
 	CreateTime int64
 	UpdateTime int64
