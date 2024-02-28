@@ -4,6 +4,7 @@ import (
 	"github.com/lutcoding/redbook/internal/repository"
 	"github.com/lutcoding/redbook/internal/repository/cache"
 	"github.com/lutcoding/redbook/internal/service"
+	"github.com/lutcoding/redbook/internal/service/oauth/dingtalk"
 	"github.com/lutcoding/redbook/internal/service/oauth/wechat"
 	"github.com/lutcoding/redbook/internal/service/sms/memory"
 	"github.com/lutcoding/redbook/internal/web/oauth"
@@ -29,8 +30,9 @@ type Server struct {
 	db    *gorm.DB
 	redis redis.Cmdable
 
-	userHandler         *user.Handler
-	oauth2WeChatHandler *oauth.OAuth2WeChatHandler
+	userHandler           *user.Handler
+	oauth2WeChatHandler   *oauth.OAuth2WeChatHandler
+	oAuth2DingTalkHandler *oauth.OAuth2DingTalkHandler
 }
 
 func NewServer() (*Server, error) {
@@ -76,9 +78,11 @@ func (s *Server) initHandlers() (err error) {
 		ratelimit.NewRedisSlidingWindowLimiter(s.redis, time.Minute, 10))
 	codeSvc := service.NewCodeService(codeRepo, smsRateLimitSvc, "1")
 	wechatService := wechat.NewService("123", "123")
+	dingTalkService := dingtalk.NewService("dingp6upv2tzv1ry0qkf", "5ECaoMLhGwl8Y6glBaxyo4weJYRV_BPh3rUs1dCSSLDMgLBnT0gaB-ejWgo48Q61")
 
 	s.userHandler = user.New(userSvc, codeSvc)
 	s.oauth2WeChatHandler = oauth.NewOAuth2WeChatHandler(wechatService, userSvc)
+	s.oAuth2DingTalkHandler = oauth.NewOAuth2DingTalkHandler(dingTalkService, userSvc)
 	return nil
 }
 
@@ -120,6 +124,11 @@ func (s *Server) newRouter() *gin.Engine {
 			{
 				wg.GET("/authurl", s.oauth2WeChatHandler.AuthURL)
 				wg.Any("/callback", s.oauth2WeChatHandler.CallBack)
+			}
+			dg := oauth2.Group("/dingtalk")
+			{
+				dg.GET("/authurl", s.oAuth2DingTalkHandler.AuthURL)
+				dg.Any("/callback", s.oAuth2DingTalkHandler.CallBack)
 			}
 		}
 	}
