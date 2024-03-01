@@ -2,22 +2,17 @@ package user
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/lutcoding/redbook/common/globalkey"
 	"net/http"
-	"strconv"
 )
 
 func (h *Handler) Profile(ctx *gin.Context) {
-	param := ctx.Query("id")
-	if param == "" {
-		ctx.JSON(http.StatusOK, gin.H{"message": "no param: id"})
+	value, exists := ctx.Get(globalkey.JwtUserId)
+	if !exists {
+		ctx.JSON(http.StatusOK, gin.H{"message": "server internal error"})
 		return
 	}
-	id, err := strconv.ParseInt(param, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"message": "param is not int64 format"})
-		return
-	}
-	user, err := h.svc.Profile(ctx, id)
+	user, err := h.svc.Profile(ctx, value.(int64))
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"message": err.Error()})
 		return

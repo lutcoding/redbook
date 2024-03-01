@@ -1,39 +1,38 @@
 package middleware
 
 import (
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lutcoding/redbook/common/globalkey"
-	"github.com/lutcoding/redbook/internal/web/user"
+	jwtHdl "github.com/lutcoding/redbook/internal/web/jwt"
 	"net/http"
-	"strings"
 )
 
 type LoginMiddlewareBuilder struct {
+	jwtHdl *jwtHdl.Handler
 }
 
-func NewLoginMiddlewareBuilder() *LoginMiddlewareBuilder {
-	return &LoginMiddlewareBuilder{}
+func NewLoginMiddlewareBuilder(jwtHdl *jwtHdl.Handler) *LoginMiddlewareBuilder {
+	return &LoginMiddlewareBuilder{
+		jwtHdl: jwtHdl,
+	}
 }
 
 func (l *LoginMiddlewareBuilder) Build() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		tokenHeader := ctx.GetHeader("Authorization")
-		if tokenHeader == "" {
-			ctx.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		segs := strings.Split(tokenHeader, " ")
-		if len(segs) != 2 {
-			ctx.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		tokenStr := segs[1]
-		claims := &user.Claims{}
+		tokenStr := l.jwtHdl.ExtractToken(ctx)
+		claims := &jwtHdl.AccessClaims{}
 		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte("NqdHZfporsLtXRTPhc01IZJXDnFsaTHsmsMWixjPEgQJyiZxsXKcsmkg1XvAWXIp"), nil
+			return l.jwtHdl.AccessKey, nil
 		})
-		if err != nil || !token.Valid || claims.Uid == 0 || claims.UserAgent != ctx.GetHeader("User-Agent") {
+		if err != nil || !token.Valid || claims.Uid == 0 || claims.UserAgent != ctx.Request.UserAgent() {
+			ctx.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		session := sessions.Default(ctx)
+		v := session.Get("ssid")
+		if v == nil {
 			ctx.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}

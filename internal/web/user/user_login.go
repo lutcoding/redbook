@@ -2,13 +2,14 @@ package user
 
 import (
 	"errors"
-	"net/http"
-	"time"
-
+	"fmt"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/lutcoding/redbook/internal/domain"
 	"github.com/lutcoding/redbook/internal/service"
+	jwtHdl "github.com/lutcoding/redbook/internal/web/jwt"
+	"net/http"
 )
 
 func (h *Handler) Login(ctx *gin.Context) {
@@ -35,8 +36,10 @@ func (h *Handler) Login(ctx *gin.Context) {
 			return
 		}
 	}
-	signedString := h.getJwtToken(ctx, user)
-	ctx.Header("x-jwt-token", signedString)
+	if h.jwtHdl.SetLoginToken(ctx, user.Id) != nil {
+		ctx.JSON(http.StatusOK, gin.H{"message": "server internal error"})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{"message": "login success"})
 	return
 }
@@ -84,21 +87,27 @@ func (h *Handler) LoginSmsCode(ctx *gin.Context) {
 	return
 }
 
-func (h *Handler) getJwtToken(ctx *gin.Context, user domain.User) string {
-	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute)),
-		},
-		Uid:       user.Id,
-		UserAgent: ctx.GetHeader("User-Agent"),
+func (h *Handler) Refresh(ctx *gin.Context) {
+	tokenStr := h.jwtHdl.ExtractToken(ctx)
+	claims := &jwtHdl.RefreshClaims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return h.jwtHdl.RefreshKey, nil
+	})
+	if err != nil || !token.Valid || claims.Uid == 0 || claims.UserAgent != ctx.Request.UserAgent() {
+		ctx.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
-	signedString, _ := token.SignedString([]byte("NqdHZfporsLtXRTPhc01IZJXDnFsaTHsmsMWixjPEgQJyiZxsXKcsmkg1XvAWXIp"))
-	return signedString
-}
-
-type Claims struct {
-	jwt.RegisteredClaims
-	Uid       int64
-	UserAgent string
+	session := sessions.Default(ctx)
+	v := session.Get("ssid")
+	if v == nil {
+		fmt.Println("2")
+		ctx.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	err = h.jwtHdl.SetLoginToken(ctx, claims.Uid)
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"message": "server internal error"})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"message": "ok"})
 }

@@ -7,12 +7,15 @@ import (
 	"github.com/lutcoding/redbook/internal/service/oauth/dingtalk"
 	"github.com/lutcoding/redbook/internal/service/oauth/wechat"
 	"github.com/lutcoding/redbook/internal/service/sms/memory"
+	"github.com/lutcoding/redbook/internal/web/jwt"
 	"github.com/lutcoding/redbook/internal/web/oauth"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/sessions"
+	sr "github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/lutcoding/redbook/internal/repository/dao"
 	smsratelimit "github.com/lutcoding/redbook/internal/service/sms/ratelimit"
@@ -30,6 +33,7 @@ type Server struct {
 	db    *gorm.DB
 	redis redis.Cmdable
 
+	jwtHandler            *jwt.Handler
 	userHandler           *user.Handler
 	oauth2WeChatHandler   *oauth.OAuth2WeChatHandler
 	oAuth2DingTalkHandler *oauth.OAuth2DingTalkHandler
@@ -80,7 +84,8 @@ func (s *Server) initHandlers() (err error) {
 	wechatService := wechat.NewService("123", "123")
 	dingTalkService := dingtalk.NewService("dingp6upv2tzv1ry0qkf", "5ECaoMLhGwl8Y6glBaxyo4weJYRV_BPh3rUs1dCSSLDMgLBnT0gaB-ejWgo48Q61")
 
-	s.userHandler = user.New(userSvc, codeSvc)
+	s.jwtHandler = jwt.NewHandler()
+	s.userHandler = user.New(userSvc, codeSvc, s.jwtHandler)
 	s.oauth2WeChatHandler = oauth.NewOAuth2WeChatHandler(wechatService, userSvc)
 	s.oAuth2DingTalkHandler = oauth.NewOAuth2DingTalkHandler(dingTalkService, userSvc)
 	return nil
@@ -89,6 +94,8 @@ func (s *Server) initHandlers() (err error) {
 // TODO: RESTful api
 func (s *Server) newRouter() *gin.Engine {
 	engine := gin.Default()
+	store, _ := sr.NewStore(10, "tcp", "localhost:6379", "", []byte("secret"))
+	engine.Use(sessions.Sessions("SESSION", store))
 	// 允许跨域
 	engine.Use(cors.New(cors.Config{
 		// AllowOrigins:     []string{"http://localhost"},
@@ -96,7 +103,7 @@ func (s *Server) newRouter() *gin.Engine {
 		AllowHeaders:     []string{"Content-Length", "Authorization"},
 		AllowCredentials: true,
 		//不加的话前端拿不到token
-		ExposeHeaders: []string{"x-jwt-token"},
+		ExposeHeaders: []string{"x-jwt-token", "x-refresh-token"},
 		// 替换 AllowOrigins
 		AllowOriginFunc: func(origin string) bool {
 			// 本地测试环境
@@ -118,6 +125,7 @@ func (s *Server) newRouter() *gin.Engine {
 		unauthorized.POST("/users/login", s.userHandler.Login)
 		unauthorized.POST("/users/login_sms/code/send", s.userHandler.SendLoginSmsCode)
 		unauthorized.POST("/users/login_sms", s.userHandler.LoginSmsCode)
+		unauthorized.GET("/users/refresh", s.userHandler.Refresh)
 		oauth2 := unauthorized.Group("/oauth2")
 		{
 			wg := oauth2.Group("/wechat")
@@ -133,12 +141,13 @@ func (s *Server) newRouter() *gin.Engine {
 		}
 	}
 
-	authorized := root.Group("/", middleware.NewLoginMiddlewareBuilder().Build())
+	authorized := root.Group("/", middleware.NewLoginMiddlewareBuilder(s.jwtHandler).Build())
 	{
 		ug := authorized.Group("/users")
 		{
 			ug.POST("/edit", s.userHandler.Edit)
 			ug.GET("/profile", s.userHandler.Profile)
+			ug.POST("/logout", s.userHandler.Logout)
 		}
 	}
 	return engine
