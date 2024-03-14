@@ -74,3 +74,24 @@ func (h *Handler) Publish(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, middlewares.Result[int64]{Data: id})
 }
+
+func (h *Handler) ToPrivate(ctx *gin.Context) {
+	type Req struct {
+		Id int64 `json:"id"`
+	}
+	var req Req
+	err := ctx.Bind(&req)
+	if err != nil {
+		return
+	}
+	id := ctx.GetInt64(globalkey.JwtUserId)
+	// 健全逻辑, 系统错误
+	if id == 0 {
+
+	}
+	err = h.svc.ToPrivate(ctx, req.Id, id)
+	if err != nil {
+		return
+	}
+	ctx.JSON(http.StatusOK, middlewares.Result[int64]{Msg: "ok"})
+}

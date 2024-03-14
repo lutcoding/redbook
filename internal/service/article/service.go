@@ -16,21 +16,27 @@ func NewService(repo repository.ArticleRepository) *Service {
 	}
 }
 
-func (s *Service) Save(ctx context.Context, article domain.Article) (int64, error) {
-	if article.Id == 0 {
-		return s.Create(ctx, article)
+func (s *Service) Save(ctx context.Context, art domain.Article) (int64, error) {
+	art.ArticleStatus = domain.ArticleStatusPrivate
+	if art.Id == 0 {
+		return s.Create(ctx, art)
 	}
-	return s.Update(ctx, article)
+	return s.Update(ctx, art)
 }
 
-func (s *Service) Create(ctx context.Context, article domain.Article) (int64, error) {
-	return s.repo.Create(ctx, article)
+func (s *Service) Create(ctx context.Context, art domain.Article) (int64, error) {
+	return s.repo.Create(ctx, art)
 }
 
-func (s *Service) Update(ctx context.Context, article domain.Article) (int64, error) {
-	return article.Id, s.repo.Update(ctx, article)
+func (s *Service) Update(ctx context.Context, art domain.Article) (int64, error) {
+	return art.Id, s.repo.Update(ctx, art)
 }
 
-func (s *Service) Sync(ctx context.Context, article domain.Article) (int64, error) {
-	return s.repo.Sync(ctx, article)
+func (s *Service) Sync(ctx context.Context, art domain.Article) (int64, error) {
+	art.ArticleStatus = domain.ArticleStatusUnPublished
+	return s.repo.Sync(ctx, art)
+}
+
+func (s *Service) ToPrivate(ctx context.Context, id int64, authorId int64) error {
+	return s.repo.SyncStatus(ctx, id, authorId, domain.ArticleStatusPrivate)
 }

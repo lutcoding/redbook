@@ -187,6 +187,7 @@ func (s *Server) newRouter() *gin.Engine {
 		{
 			ag.POST("/create", s.articleHandler.Create)
 			ag.POST("/publish", s.articleHandler.Publish)
+			ag.POST("/private", s.articleHandler.ToPrivate)
 		}
 	}
 	return engine

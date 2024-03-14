@@ -11,6 +11,10 @@ const (
 	ArticleStatusPrivate
 )
 
+func (s ArticleStatus) ToUint8() uint8 {
+	return uint8(s)
+}
+
 type Article struct {
 	Id       int64
 	Tittle   string

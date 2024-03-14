@@ -3,6 +3,7 @@ package article
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"time"
@@ -13,6 +14,7 @@ type ArticleDAO interface {
 	Update(ctx context.Context, article Article) error
 	Sync(ctx context.Context, article Article) (int64, error)
 	Upsert(ctx context.Context, art PublishArticle) error
+	SyncStatus(ctx context.Context, id int64, authorId int64, status uint8) error
 }
 
 type GORMArticleDao struct {
@@ -39,6 +41,7 @@ func (dao *GORMArticleDao) Update(ctx context.Context, art Article) error {
 		Updates(map[string]any{
 			"tittle":      art.Tittle,
 			"content":     art.Content,
+			"status":      art.Status,
 			"update_time": now,
 		})
 	if res.Error != nil {
@@ -57,13 +60,14 @@ func (dao *GORMArticleDao) Upsert(ctx context.Context, art PublishArticle) error
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"tittle":      art.Tittle,
 			"content":     art.Content,
+			"status":      art.Status,
 			"update_time": now,
 		}),
 	}).Create(&art).Error
 }
 
 func (dao *GORMArticleDao) Sync(ctx context.Context, art Article) (int64, error) {
-	err := dao.db.Transaction(func(tx *gorm.DB) error {
+	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var (
 			id  = art.Id
 			err error
@@ -84,11 +88,38 @@ func (dao *GORMArticleDao) Sync(ctx context.Context, art Article) (int64, error)
 	return art.Id, err
 }
 
+func (dao *GORMArticleDao) SyncStatus(ctx context.Context, id int64, authorId int64, status uint8) error {
+	now := time.Now().UnixMilli()
+	return dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&Article{}).
+			Where("id = ? AND author_id = ?", id, authorId).
+			Updates(map[string]any{
+				"status":      status,
+				"update_time": now,
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			// 1.没有这篇文章
+			// 有人攻击网站，试图改写他人文章
+			return fmt.Errorf("文章不存在or不是本人文章,无法修改")
+		}
+		return tx.Model(&PublishArticle{}).
+			Where("id = ?", id).
+			Updates(map[string]any{
+				"status":      status,
+				"update_time": now,
+			}).Error
+	})
+}
+
 type Article struct {
 	Id      int64  `gorm:"primaryKey, autoIncrement"`
 	Tittle  string `gorm:"type=varchar(1024)"`
 	Content string `gorm:"type=BLOB"`
 
+	Status   uint8
 	AuthorId int64
 
 	CreateTime int64
