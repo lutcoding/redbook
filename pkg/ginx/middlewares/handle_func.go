@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func WrapReq[T any](fn func(ctx *gin.Context, req T, uc jwt.AccessClaims) (Result[T], error)) gin.HandlerFunc {
+func WrapReq[T, R any](fn func(ctx *gin.Context, req T, uc jwt.AccessClaims) (Result[R], error)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var req T
 		err := ctx.Bind(&req)

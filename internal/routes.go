@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"github.com/lutcoding/redbook/internal/config"
 	"github.com/lutcoding/redbook/internal/repository"
 	"github.com/lutcoding/redbook/internal/repository/cache"
@@ -14,6 +15,8 @@ import (
 	"github.com/lutcoding/redbook/internal/web/jwt"
 	"github.com/lutcoding/redbook/internal/web/oauth"
 	"github.com/spf13/viper"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
@@ -39,6 +42,7 @@ type Server struct {
 	db    *gorm.DB
 	redis redis.Cmdable
 	cfg   config.Config
+	mongo *mongo.Client
 
 	jwtHandler            *jwt.Handler
 	userHandler           *user.Handler
@@ -65,6 +69,10 @@ func (s *Server) Serve(addr string) (err error) {
 	err = s.initLog()
 	if err != nil {
 		return
+	}
+	err = s.initMongo()
+	if err != nil {
+		return err
 	}
 	if s.db, err = gorm.Open(mysql.Open(s.cfg.DB.Mysql.DSN)); err != nil {
 		return
@@ -97,6 +105,23 @@ func (s *Server) initLog() (err error) {
 		return err
 	}
 	zap.ReplaceGlobals(logger)
+	return nil
+}
+
+func (s *Server) initMongo() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ops := options.Client().
+		ApplyURI(s.cfg.DB.Mongo.URI).
+		SetAuth(options.Credential{
+			Username: s.cfg.DB.Mongo.Username,
+			Password: s.cfg.DB.Mongo.Password,
+		})
+	client, err := mongo.Connect(ctx, ops)
+	if err != nil {
+		return err
+	}
+	s.mongo = client
 	return nil
 }
 

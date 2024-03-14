@@ -9,6 +9,7 @@ type Config struct {
 
 type DB struct {
 	Mysql Mysql `yaml:"mysql"`
+	Mongo Mongo `yaml:"mongo"`
 }
 
 type Mysql struct {
@@ -28,4 +29,10 @@ type Wechat struct {
 type Ding struct {
 	AppKey    string `yaml:"appKey"`
 	AppSecret string `yaml:"appSecret"`
+}
+
+type Mongo struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	URI      string `yaml:"uri"`
 }
