@@ -1,14 +1,20 @@
 package internal
 
 import (
+	"github.com/lutcoding/redbook/internal/config"
 	"github.com/lutcoding/redbook/internal/repository"
 	"github.com/lutcoding/redbook/internal/repository/cache"
+	article2 "github.com/lutcoding/redbook/internal/repository/dao/article"
 	"github.com/lutcoding/redbook/internal/service"
+	articleService "github.com/lutcoding/redbook/internal/service/article"
 	"github.com/lutcoding/redbook/internal/service/oauth/dingtalk"
 	"github.com/lutcoding/redbook/internal/service/oauth/wechat"
 	"github.com/lutcoding/redbook/internal/service/sms/memory"
+	"github.com/lutcoding/redbook/internal/web/article"
 	"github.com/lutcoding/redbook/internal/web/jwt"
 	"github.com/lutcoding/redbook/internal/web/oauth"
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 	"time"
@@ -32,24 +38,39 @@ type Server struct {
 	srv   *http.Server
 	db    *gorm.DB
 	redis redis.Cmdable
+	cfg   config.Config
 
 	jwtHandler            *jwt.Handler
 	userHandler           *user.Handler
 	oauth2WeChatHandler   *oauth.OAuth2WeChatHandler
 	oAuth2DingTalkHandler *oauth.OAuth2DingTalkHandler
+	articleHandler        *article.Handler
 }
 
 func NewServer() (*Server, error) {
+	viper.SetConfigFile("etc/dev.yaml")
+	err := viper.ReadInConfig()
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{}
+	err = viper.Unmarshal(&s.cfg)
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
 func (s *Server) Serve(addr string) (err error) {
-	if s.db, err = gorm.Open(mysql.Open("root:root@tcp(localhost:13316)/webook")); err != nil {
+	err = s.initLog()
+	if err != nil {
+		return
+	}
+	if s.db, err = gorm.Open(mysql.Open(s.cfg.DB.Mysql.DSN)); err != nil {
 		return
 	}
 	s.redis = redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: s.cfg.Redis.Addr,
 	})
 	if err = dao.InitTables(s.db); err != nil {
 		return
@@ -65,36 +86,48 @@ func (s *Server) Serve(addr string) (err error) {
 	}
 	err = s.srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
+		return
+	}
+	return nil
+}
+
+func (s *Server) initLog() (err error) {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
 		return err
 	}
+	zap.ReplaceGlobals(logger)
 	return nil
 }
 
 func (s *Server) initHandlers() (err error) {
 	userDAO := dao.NewUserGormDAO(s.db)
+	articleDAO := article2.NewGORMArticleDao(s.db)
 	userCache := cache.NewUserRedisCache(s.redis)
 	codeCache := cache.NewCodeRedisCache(s.redis)
 	userRepo := repository.NewUserCacheRepository(userDAO, userCache)
 	codeRepo := repository.NewCodeCacheRepository(codeCache)
+	articleRepo := repository.NewArticleCacheRepository(articleDAO)
 
 	userSvc := service.NewUserService(userRepo)
 	smsRateLimitSvc := smsratelimit.NewService(memory.NewService(),
 		ratelimit.NewRedisSlidingWindowLimiter(s.redis, time.Minute, 10))
 	codeSvc := service.NewCodeService(codeRepo, smsRateLimitSvc, "1")
-	wechatService := wechat.NewService("123", "123")
-	dingTalkService := dingtalk.NewService("dingp6upv2tzv1ry0qkf", "5ECaoMLhGwl8Y6glBaxyo4weJYRV_BPh3rUs1dCSSLDMgLBnT0gaB-ejWgo48Q61")
+	wechatSvc := wechat.NewService(s.cfg.Wechat.AppID, s.cfg.Wechat.AppSecret)
+	dingTalkSvc := dingtalk.NewService(s.cfg.Ding.AppKey, s.cfg.Ding.AppSecret)
+	articleSvc := articleService.NewService(articleRepo)
 
 	s.jwtHandler = jwt.NewHandler()
 	s.userHandler = user.New(userSvc, codeSvc, s.jwtHandler)
-	s.oauth2WeChatHandler = oauth.NewOAuth2WeChatHandler(wechatService, userSvc)
-	s.oAuth2DingTalkHandler = oauth.NewOAuth2DingTalkHandler(dingTalkService, userSvc)
+	s.oauth2WeChatHandler = oauth.NewOAuth2WeChatHandler(wechatSvc, userSvc)
+	s.oAuth2DingTalkHandler = oauth.NewOAuth2DingTalkHandler(dingTalkSvc, userSvc)
+	s.articleHandler = article.NewHandler(articleSvc)
 	return nil
 }
 
-// TODO: RESTful api
 func (s *Server) newRouter() *gin.Engine {
 	engine := gin.Default()
-	store, _ := sr.NewStore(10, "tcp", "localhost:6379", "", []byte("secret"))
+	store, _ := sr.NewStore(10, "tcp", s.cfg.Redis.Addr, "", []byte("secret"))
 	engine.Use(sessions.Sessions("SESSION", store))
 	// 允许跨域
 	engine.Use(cors.New(cors.Config{
@@ -148,6 +181,12 @@ func (s *Server) newRouter() *gin.Engine {
 			ug.POST("/edit", s.userHandler.Edit)
 			ug.GET("/profile", s.userHandler.Profile)
 			ug.POST("/logout", s.userHandler.Logout)
+		}
+
+		ag := authorized.Group("/articles")
+		{
+			ag.POST("/create", s.articleHandler.Create)
+			ag.POST("/publish", s.articleHandler.Publish)
 		}
 	}
 	return engine

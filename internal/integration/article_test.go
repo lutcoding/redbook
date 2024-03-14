@@ -7,6 +7,7 @@ import (
 	"github.com/lutcoding/redbook/common/globalkey"
 	"github.com/lutcoding/redbook/internal/repository"
 	"github.com/lutcoding/redbook/internal/repository/dao"
+	article2 "github.com/lutcoding/redbook/internal/repository/dao/article"
 	articleService "github.com/lutcoding/redbook/internal/service/article"
 	"github.com/lutcoding/redbook/internal/web/article"
 	"github.com/lutcoding/redbook/pkg/ginx/middlewares"
@@ -34,7 +35,7 @@ func (s *ArticleSuite) SetupSuite() {
 	err = dao.InitTables(db)
 	assert.NoError(s.T(), err)
 	s.db = db
-	articleDAO := dao.NewGORMArticleDao(db)
+	articleDAO := article2.NewGORMArticleDao(db)
 	articleRepo := repository.NewArticleCacheRepository(articleDAO)
 	svc := articleService.NewService(articleRepo)
 	handler := article.NewHandler(svc)

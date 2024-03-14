@@ -51,3 +51,26 @@ func (h *Handler) Edit(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, middlewares.Result[int64]{Data: id})
 }
+
+func (h *Handler) Publish(ctx *gin.Context) {
+	type CreateReq struct {
+		Id      int64  `json:"id"`
+		Tittle  string `json:"tittle"`
+		Content string `json:"content"`
+	}
+	var req CreateReq
+	err := ctx.Bind(&req)
+	if err != nil {
+		return
+	}
+	id, err := h.svc.Sync(ctx, domain.Article{
+		Id:       req.Id,
+		Tittle:   req.Tittle,
+		Content:  req.Content,
+		AuthorId: ctx.GetInt64(globalkey.JwtUserId),
+	})
+	if err != nil {
+		return
+	}
+	ctx.JSON(http.StatusOK, middlewares.Result[int64]{Data: id})
+}

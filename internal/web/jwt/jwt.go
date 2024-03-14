@@ -27,7 +27,7 @@ func (h *Handler) SetLoginToken(ctx *gin.Context, uid int64) error {
 func (h *Handler) SetAccessJwtToken(ctx *gin.Context, uid int64, ssid string) error {
 	claims := AccessClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Second * 10)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
 		},
 		Uid:       uid,
 		Ssid:      ssid,

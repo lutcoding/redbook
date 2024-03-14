@@ -30,3 +30,7 @@ func (s *Service) Create(ctx context.Context, article domain.Article) (int64, er
 func (s *Service) Update(ctx context.Context, article domain.Article) (int64, error) {
 	return article.Id, s.repo.Update(ctx, article)
 }
+
+func (s *Service) Sync(ctx context.Context, article domain.Article) (int64, error) {
+	return s.repo.Sync(ctx, article)
+}
