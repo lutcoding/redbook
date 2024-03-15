@@ -32,6 +32,8 @@ func (s *Service) Start() {
 
 func (s *Service) async() {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
+	// 抢占一个异步发送消息
+	// 比如k8s部署了三个实例，保证只有一个实例抢占到该消息
 	waitingSms, err := s.repo.GetWaitingSms(ctx)
 	cancelFunc()
 	switch err {
