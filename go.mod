@@ -7,6 +7,7 @@ require (
 	github.com/alibabacloud-go/dingtalk v1.6.50
 	github.com/alibabacloud-go/tea v1.2.1
 	github.com/alibabacloud-go/tea-utils v1.4.3
+	github.com/bwmarrin/snowflake v0.3.0
 	github.com/dlclark/regexp2 v1.10.0
 	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-contrib/sessions v0.0.5

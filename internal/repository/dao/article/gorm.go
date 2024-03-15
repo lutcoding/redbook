@@ -74,7 +74,15 @@ func (dao *GORMArticleDao) Sync(ctx context.Context, art Article) (int64, error)
 			return err
 		}
 		art.Id = id
-		err = txDAO.Upsert(ctx, PublishArticle{art})
+		err = txDAO.Upsert(ctx, PublishArticle{
+			Id:         art.Id,
+			Tittle:     art.Tittle,
+			Content:    art.Content,
+			Status:     art.Status,
+			AuthorId:   art.AuthorId,
+			CreateTime: art.CreateTime,
+			UpdateTime: art.UpdateTime,
+		})
 		return err
 	})
 	return art.Id, err
@@ -104,20 +112,4 @@ func (dao *GORMArticleDao) SyncStatus(ctx context.Context, id int64, authorId in
 				"update_time": now,
 			}).Error
 	})
-}
-
-type Article struct {
-	Id      int64  `gorm:"primaryKey, autoIncrement"`
-	Tittle  string `gorm:"type=varchar(1024)"`
-	Content string `gorm:"type=BLOB"`
-
-	Status   uint8
-	AuthorId int64
-
-	CreateTime int64
-	UpdateTime int64
-}
-
-type PublishArticle struct {
-	Article
 }

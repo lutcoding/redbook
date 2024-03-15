@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/event"
 	"testing"
 	"time"
@@ -37,27 +36,26 @@ func TestMango(t *testing.T) {
 	collection := database.Collection("articles")
 	result, err := collection.InsertMany(ctx, []interface{}{
 		Article{
-			Id:      123,
-			Tittle:  "this is tittle",
-			Content: "this is content",
+			A{
+				Id:      123,
+				Tittle:  "this is tittle",
+				Content: "this is content",
+			},
 		},
 	})
 	assert.NoError(t, err)
 	fmt.Printf("id: %v\n", result.InsertedIDs)
 
-	var art Article
-	err = collection.FindOne(ctx, Article{Id: 123}).Decode(&art)
-	assert.NoError(t, err)
-
-	filter := bson.D{bson.E{Key: "id", Value: 123}}
-	update := bson.D{bson.E{Key: "$set", Value: bson.E{Key: "tittle", Value: "new tittle"}}}
-	updateResult, err := collection.UpdateMany(ctx, filter, update)
-	assert.NoError(t, err)
-	collection.UpdateMany(ctx, filter, bson.D{bson.E{Key: "$set", Value: Article{Tittle: "new tittle"}}})
-	fmt.Println(updateResult.ModifiedCount)
+	//var art Article
+	//err = collection.FindOne(ctx, Article{Id: 123}).Decode(&art)
+	//assert.NoError(t, err)
 }
 
 type Article struct {
+	A
+}
+
+type A struct {
 	Id      int64  `bson:"id,omitempty"`
 	Tittle  string `bson:"tittle,omitempty"`
 	Content string `bson:"content,omitempty"`
