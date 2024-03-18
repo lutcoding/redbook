@@ -36,8 +36,8 @@ func NewCodeRedisCache(client redis.Cmdable) *CodeRedisCache {
 	}
 }
 
-func (c *CodeRedisCache) Set(ctx context.Context, biz, phone, code string) error {
-	res, err := c.client.Eval(ctx, luaSetCode, []string{c.key(biz, phone)}, code).Int()
+func (cache *CodeRedisCache) Set(ctx context.Context, biz, phone, code string) error {
+	res, err := cache.client.Eval(ctx, luaSetCode, []string{cache.key(biz, phone)}, code).Int()
 	if err != nil {
 		return err
 	}
@@ -51,8 +51,8 @@ func (c *CodeRedisCache) Set(ctx context.Context, biz, phone, code string) error
 	}
 }
 
-func (c *CodeRedisCache) Verify(ctx context.Context, biz, phone, inputCode string) (bool, error) {
-	res, err := c.client.Eval(ctx, luaVerifyCode, []string{c.key(biz, phone)}, inputCode).Int()
+func (cache *CodeRedisCache) Verify(ctx context.Context, biz, phone, inputCode string) (bool, error) {
+	res, err := cache.client.Eval(ctx, luaVerifyCode, []string{cache.key(biz, phone)}, inputCode).Int()
 	if err != nil {
 		return false, err
 	}
@@ -68,6 +68,6 @@ func (c *CodeRedisCache) Verify(ctx context.Context, biz, phone, inputCode strin
 	}
 }
 
-func (c *CodeRedisCache) key(biz, phone string) string {
+func (cache *CodeRedisCache) key(biz, phone string) string {
 	return fmt.Sprintf("%s%s:%s", globalkey.PhoneCodeCachePrefix, biz, phone)
 }

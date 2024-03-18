@@ -70,10 +70,10 @@ func (s *Server) Serve(addr string) (err error) {
 	if err != nil {
 		return
 	}
-	err = s.initMongo()
-	if err != nil {
-		return err
-	}
+	//err = s.initMongo()
+	//if err != nil {
+	//	return err
+	//}
 	if s.db, err = gorm.Open(mysql.Open(s.cfg.DB.Mysql.DSN)); err != nil {
 		return
 	}
@@ -130,9 +130,10 @@ func (s *Server) initHandlers() (err error) {
 	articleDAO := article2.NewGORMArticleDao(s.db)
 	userCache := cache.NewUserRedisCache(s.redis)
 	codeCache := cache.NewCodeRedisCache(s.redis)
+	articleCache := cache.NewArticleRedisCache(s.redis)
 	userRepo := repository.NewUserCacheRepository(userDAO, userCache)
 	codeRepo := repository.NewCodeCacheRepository(codeCache)
-	articleRepo := repository.NewArticleCacheRepository(articleDAO)
+	articleRepo := repository.NewArticleCacheRepository(articleDAO, articleCache)
 
 	userSvc := service.NewUserService(userRepo)
 	smsRateLimitSvc := smsratelimit.NewService(memory.NewService(),
@@ -210,9 +211,16 @@ func (s *Server) newRouter() *gin.Engine {
 
 		ag := authorized.Group("/articles")
 		{
-			ag.POST("/create", s.articleHandler.Create)
-			ag.POST("/publish", s.articleHandler.Publish)
-			ag.POST("/private", s.articleHandler.ToPrivate)
+			draft := ag.Group("/draft")
+			{
+				draft.POST("/create", s.articleHandler.Create)
+				draft.POST("/list", s.articleHandler.ListDraft)
+			}
+			published := ag.Group("/published")
+			{
+				published.POST("/publish", s.articleHandler.Publish)
+				published.POST("/private", s.articleHandler.ToPrivate)
+			}
 		}
 	}
 	return engine

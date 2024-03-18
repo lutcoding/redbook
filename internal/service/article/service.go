@@ -17,7 +17,7 @@ func NewService(repo repository.ArticleRepository) *Service {
 }
 
 func (s *Service) Save(ctx context.Context, art domain.Article) (int64, error) {
-	art.ArticleStatus = domain.ArticleStatusPrivate
+	art.ArticleStatus = domain.ArticleStatusUnPublished
 	if art.Id == 0 {
 		return s.Create(ctx, art)
 	}
@@ -33,10 +33,14 @@ func (s *Service) Update(ctx context.Context, art domain.Article) (int64, error)
 }
 
 func (s *Service) Sync(ctx context.Context, art domain.Article) (int64, error) {
-	art.ArticleStatus = domain.ArticleStatusUnPublished
+	art.ArticleStatus = domain.ArticleStatusPublished
 	return s.repo.Sync(ctx, art)
 }
 
 func (s *Service) ToPrivate(ctx context.Context, id int64, authorId int64) error {
 	return s.repo.SyncStatus(ctx, id, authorId, domain.ArticleStatusPrivate)
+}
+
+func (s *Service) ListAuthorDraft(ctx context.Context, uid int64, limit, offset int) ([]domain.Article, error) {
+	return s.repo.ListAuthorDraft(ctx, uid, limit, offset)
 }

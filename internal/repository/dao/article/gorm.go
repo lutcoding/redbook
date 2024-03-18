@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lutcoding/redbook/internal/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"time"
@@ -112,4 +113,53 @@ func (dao *GORMArticleDao) SyncStatus(ctx context.Context, id int64, authorId in
 				"update_time": now,
 			}).Error
 	})
+}
+
+func (dao *GORMArticleDao) GetDraftPageByAuthor(ctx context.Context, uid int64, limit, offset int) ([]Article, error) {
+	var arts []Article
+	err := dao.db.WithContext(ctx).
+		Where("author_id = ?", uid).
+		Limit(limit).Offset(offset).
+		Clauses(clause.OrderBy{Columns: []clause.OrderByColumn{
+			{Column: clause.Column{Name: "update_time"}, Desc: true},
+		}}).
+		Find(&arts).Error
+
+	return arts, err
+}
+
+func (dao *GORMArticleDao) GetPubPageByAuthor(ctx context.Context, uid int64, limit, offset int) ([]PublishArticle, error) {
+	var arts []PublishArticle
+	err := dao.db.WithContext(ctx).
+		Where("author_id = ? AND status = ?", uid, domain.ArticleStatusPublished.ToUint8()).
+		Limit(limit).Offset(offset).
+		Clauses(clause.OrderBy{
+			Columns: []clause.OrderByColumn{
+				{Column: clause.Column{Name: "update_time"}, Desc: true},
+			},
+		}).Find(&arts).Error
+	return arts, err
+}
+
+func (dao *GORMArticleDao) GetDraftById(ctx context.Context, id int64) (Article, error) {
+	var art Article
+	err := dao.db.WithContext(ctx).Where("id = ?", id).First(&art).Error
+	return art, err
+}
+
+func (dao *GORMArticleDao) GetPubById(ctx context.Context, id int64) (PublishArticle, error) {
+	var art PublishArticle
+	err := dao.db.WithContext(ctx).Where("id = ?", id).First(&art).Error
+	return art, err
+}
+
+func (dao *GORMArticleDao) GetPubPageByTime(ctx context.Context, start time.Time, limit, offset int) ([]PublishArticle, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*100)
+	defer cancel()
+	var arts []PublishArticle
+	const ArticleStatusPublished = 2
+	err := dao.db.WithContext(ctx).
+		Where("update_time < ? AND status = ?", start.UnixMilli(), ArticleStatusPublished).
+		Limit(limit).Offset(offset).Find(&arts).Error
+	return arts, err
 }

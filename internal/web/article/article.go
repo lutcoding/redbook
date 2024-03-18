@@ -95,3 +95,44 @@ func (h *Handler) ToPrivate(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, middlewares.Result[int64]{Msg: "ok"})
 }
+
+func (h *Handler) ListDraft(ctx *gin.Context) {
+	type ListReq struct {
+		Limit  int `json:"limit"`
+		Offset int `json:"offset"`
+	}
+	type ArticleVO struct {
+		Id       int64  `json:"id"`
+		Tittle   string `json:"tittle"`
+		Abstract string `json:"abstract"`
+		Content  string `json:"content"`
+		Status   uint8  `json:"status"`
+	}
+	var req ListReq
+	err := ctx.Bind(&req)
+	if err != nil {
+		ctx.JSON(http.StatusOK, middlewares.Result[int64]{Msg: err.Error()})
+		return
+	}
+	articles, err := h.svc.ListAuthorDraft(ctx, ctx.GetInt64(globalkey.JwtUserId), req.Limit, req.Offset)
+	if err != nil {
+		ctx.JSON(http.StatusOK, middlewares.Result[int64]{Msg: err.Error()})
+		return
+	}
+	fn := func(arts []domain.Article) []ArticleVO {
+		res := make([]ArticleVO, len(arts))
+		for i, art := range arts {
+			res[i] = ArticleVO{
+				Id:       art.Id,
+				Tittle:   art.Tittle,
+				Content:  art.Content,
+				Abstract: art.Abstract(),
+				Status:   art.ArticleStatus.ToUint8(),
+			}
+		}
+		return res
+	}
+	ctx.JSON(http.StatusOK, middlewares.Result[[]ArticleVO]{
+		Data: fn(articles),
+	})
+}
