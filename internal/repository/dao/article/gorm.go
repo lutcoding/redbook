@@ -149,7 +149,7 @@ func (dao *GORMArticleDao) GetDraftById(ctx context.Context, id int64) (Article,
 
 func (dao *GORMArticleDao) GetPubById(ctx context.Context, id int64) (PublishArticle, error) {
 	var art PublishArticle
-	err := dao.db.WithContext(ctx).Where("id = ?", id).First(&art).Error
+	err := dao.db.WithContext(ctx).Where("id = ? AND status = ?", id, 2).First(&art).Error
 	return art, err
 }
 

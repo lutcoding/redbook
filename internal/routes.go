@@ -2,10 +2,13 @@ package internal
 
 import (
 	"context"
+	"github.com/IBM/sarama"
 	"github.com/lutcoding/redbook/internal/config"
+	"github.com/lutcoding/redbook/internal/events"
+	articleMsgQueue "github.com/lutcoding/redbook/internal/events/article"
 	"github.com/lutcoding/redbook/internal/repository"
 	"github.com/lutcoding/redbook/internal/repository/cache"
-	article2 "github.com/lutcoding/redbook/internal/repository/dao/article"
+	articleDao "github.com/lutcoding/redbook/internal/repository/dao/article"
 	"github.com/lutcoding/redbook/internal/service"
 	articleService "github.com/lutcoding/redbook/internal/service/article"
 	"github.com/lutcoding/redbook/internal/service/oauth/dingtalk"
@@ -37,12 +40,14 @@ import (
 )
 
 type Server struct {
-	route *gin.Engine
-	srv   *http.Server
-	db    *gorm.DB
-	redis redis.Cmdable
-	cfg   config.Config
-	mongo *mongo.Client
+	route       *gin.Engine
+	srv         *http.Server
+	db          *gorm.DB
+	redis       redis.Cmdable
+	cfg         config.Config
+	mongo       *mongo.Client
+	msgConsumer []events.Consumer
+	kafkaClient sarama.Client
 
 	jwtHandler            *jwt.Handler
 	userHandler           *user.Handler
@@ -74,6 +79,14 @@ func (s *Server) Serve(addr string) (err error) {
 	//if err != nil {
 	//	return err
 	//}
+	err = s.initSarama()
+	if err != nil {
+		return err
+	}
+	s.msgConsumer, err = s.initMsgConsumer()
+	if err != nil {
+		return err
+	}
 	if s.db, err = gorm.Open(mysql.Open(s.cfg.DB.Mysql.DSN)); err != nil {
 		return
 	}
@@ -86,6 +99,10 @@ func (s *Server) Serve(addr string) (err error) {
 	if err = s.initHandlers(); err != nil {
 		return
 	}
+	err = s.startConsumer()
+	if err != nil {
+		return err
+	}
 	s.route = s.newRouter()
 	s.srv = &http.Server{
 		Addr:              addr,
@@ -95,6 +112,28 @@ func (s *Server) Serve(addr string) (err error) {
 	err = s.srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
 		return
+	}
+	return nil
+}
+
+func (s *Server) initSarama() error {
+	var err error
+	cfg := sarama.NewConfig()
+	cfg.Producer.Return.Successes = true
+	s.kafkaClient, err = sarama.NewClient(s.cfg.Kafka.Addrs, cfg)
+	return err
+}
+
+func (s *Server) initMsgConsumer() ([]events.Consumer, error) {
+	return nil, nil
+}
+
+func (s *Server) startConsumer() error {
+	for _, consumer := range s.msgConsumer {
+		err := consumer.Start()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -125,15 +164,26 @@ func (s *Server) initMongo() error {
 	return nil
 }
 
-func (s *Server) initHandlers() (err error) {
+func (s *Server) initHandlers() error {
+	artReadProducer, err := sarama.NewSyncProducerFromClient(s.kafkaClient)
+	if err != nil {
+		return err
+	}
+	articleReadProducer := articleMsgQueue.NewKafkaProducer(artReadProducer, "article_read")
+
 	userDAO := dao.NewUserGormDAO(s.db)
-	articleDAO := article2.NewGORMArticleDao(s.db)
+	articleDAO := articleDao.NewGORMArticleDao(s.db)
+	interactiveDAO := dao.NewGORMInteractiveDAO(s.db)
+
 	userCache := cache.NewUserRedisCache(s.redis)
 	codeCache := cache.NewCodeRedisCache(s.redis)
 	articleCache := cache.NewArticleRedisCache(s.redis)
+	interactiveCache := cache.NewInteractiveRedisCache(s.redis)
+
 	userRepo := repository.NewUserCacheRepository(userDAO, userCache)
 	codeRepo := repository.NewCodeCacheRepository(codeCache)
 	articleRepo := repository.NewArticleCacheRepository(articleDAO, articleCache)
+	interactiveRepo := repository.NewInteractiveCacheRepository(interactiveDAO, interactiveCache)
 
 	userSvc := service.NewUserService(userRepo)
 	smsRateLimitSvc := smsratelimit.NewService(memory.NewService(),
@@ -141,13 +191,14 @@ func (s *Server) initHandlers() (err error) {
 	codeSvc := service.NewCodeService(codeRepo, smsRateLimitSvc, "1")
 	wechatSvc := wechat.NewService(s.cfg.Wechat.AppID, s.cfg.Wechat.AppSecret)
 	dingTalkSvc := dingtalk.NewService(s.cfg.Ding.AppKey, s.cfg.Ding.AppSecret)
-	articleSvc := articleService.NewService(articleRepo)
+	articleSvc := articleService.NewService(articleRepo, articleReadProducer)
+	interactiveSvc := service.NewInteractiveService(interactiveRepo)
 
 	s.jwtHandler = jwt.NewHandler()
 	s.userHandler = user.New(userSvc, codeSvc, s.jwtHandler)
 	s.oauth2WeChatHandler = oauth.NewOAuth2WeChatHandler(wechatSvc, userSvc)
 	s.oAuth2DingTalkHandler = oauth.NewOAuth2DingTalkHandler(dingTalkSvc, userSvc)
-	s.articleHandler = article.NewHandler(articleSvc)
+	s.articleHandler = article.NewHandler(articleSvc, interactiveSvc)
 	return nil
 }
 
@@ -215,11 +266,17 @@ func (s *Server) newRouter() *gin.Engine {
 			{
 				draft.POST("/create", s.articleHandler.Create)
 				draft.POST("/list", s.articleHandler.ListDraft)
+				draft.POST("/update", s.articleHandler.Edit)
+				draft.POST("/get", s.articleHandler.GetDraft)
 			}
 			published := ag.Group("/published")
 			{
 				published.POST("/publish", s.articleHandler.Publish)
 				published.POST("/private", s.articleHandler.ToPrivate)
+				// 列出他人的已发表文章
+				published.POST("/list", s.articleHandler.ListPub)
+				published.GET("/get/:id", s.articleHandler.GetPub)
+				published.POST("/like", s.articleHandler.Like)
 			}
 		}
 	}

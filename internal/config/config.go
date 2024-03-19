@@ -5,6 +5,7 @@ type Config struct {
 	Redis  Redis  `yaml:"redis"`
 	Wechat Wechat `yaml:"wechat"`
 	Ding   Ding   `yaml:"ding"`
+	Kafka  Kafka  `yaml:"kafka"`
 }
 
 type DB struct {
@@ -35,4 +36,8 @@ type Mongo struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	URI      string `yaml:"uri"`
+}
+
+type Kafka struct {
+	Addrs []string `yaml:"addrs"`
 }
